@@ -1,9 +1,9 @@
 {
   "manifest_version": 2,
   "id": "com.neal240.xiaohongshu",
-  "version": "0.1.1",
-  "name": "小红书适配器（开发版）",
-  "description": "小红书白名单私信、兴趣浏览与图文发布适配器，开发验证版本。",
+  "version": "0.1.2",
+  "name": "麦麦小红书",
+  "description": "让麦麦浏览小红书、阅读白名单私信，并规划发布图文。",
   "author": {"name": "Neal240", "url": "https://github.com/neal240"},
   "license": "MIT",
   "urls": {"repository": "https://github.com/neal240/maibot-xiaohongshu"},
