@@ -28,7 +28,7 @@
 - `dm.mode`：默认为 `whitelist`，只处理白名单；改为 `all` 后处理所有人的单聊私信，不需要填写用户 ID。群聊不处理。
 - `dm.allowed_users`：允许处理私信的用户 ID 列表。获取方法见下文；主页显示的小红书号不能直接填入。
 - `dm.reply_probability`：回复概率，范围 0～1；例如 `0.5` 表示约一半消息允许回复，`1` 表示全部允许。允许回复后仍由麦麦自行决定是否回应。
-- `browse.interests`：感兴趣的主题词；启用 `browse.enabled` 后，麦麦会按主题浏览并保存摘要。
+- `browse.interests`：参考兴趣和搜索词。启用 `browse.enabled` 后，麦麦先从首页推荐里挑选感兴趣的笔记；没有合适的内容时，再随机选择一个词搜索。留空时只看首页推荐。
 - `browse.interval_seconds` 和 `browse.notes_per_cycle`：浏览间隔及每次保存的笔记数量。
 - `browse.timezone`、`browse.time_windows`、`browse.start_date` 和 `browse.end_date`：设置主动浏览的时区、时段和日期。例如只在 2026 年 10 月 30 日的 09:00–11:00 浏览，可将起止日期都设为 `2026-10-30`，时段设为 `09:00-11:00`。时段留空表示全天。
 - `browse.daily_token_limit`：主动浏览每日 Token 上限，`0` 表示不限制；最后一次请求可能略超上限。

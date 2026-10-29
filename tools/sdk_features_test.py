@@ -51,6 +51,9 @@ class FakeLLM:
         if '规划一篇' in prompt:
             return {'success': True, 'response': '{"publish":true,"title":"标题","text":"正文"}',
                     'prompt_tokens': 10, 'completion_tokens': 10, 'total_tokens': 20}
+        if '候选标题' in prompt:
+            return {'success': True, 'response': '[0]', 'prompt_tokens': 10,
+                    'completion_tokens': 10, 'total_tokens': 20}
         return {'success': True, 'response': '摘要：一只猫。', 'prompt_tokens': 10,
                 'completion_tokens': 10, 'total_tokens': 20}
 
@@ -89,6 +92,7 @@ async def main():
                 'message_info': {'additional_config': {'platform_io_target_user_id': USER}},
                 'raw_message': [{'type': 'text', 'data': 'reply'}]}
             assert not (await instance.send_to_platform(outgoing))['success']
+            instance._browse_client = instance._client
             await instance._browse_once()
             assert instance._memory.contains(ME, NOTE)
             history = await instance.browse_history(query='猫', offset=0)

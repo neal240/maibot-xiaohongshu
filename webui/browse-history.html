@@ -13,6 +13,7 @@
     p { margin: 0; }
     .muted { color: var(--maibot-muted, #56606e); }
     .intro { max-width: 64ch; margin-bottom: 24px; }
+    .warning { margin: 0 0 20px; padding: 12px 14px; border: 1px solid var(--maibot-border, #d8dce3); border-radius: 8px; }
     .toolbar { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
     .search-field { flex: 1 1 250px; min-width: 0; }
     label { display: block; margin-bottom: 5px; font-size: .875rem; font-weight: 650; }
@@ -52,6 +53,7 @@
     <h1>小红书浏览记录</h1>
     <p class="intro muted">看看麦麦读过哪些笔记，以及她记下了什么。这里记录已打开并尝试总结的笔记，保留最近 30 天，最多 500 条。</p>
   </header>
+  <p id="browse-warning" class="warning" role="status" hidden>小红书未接受浏览请求，主动浏览已暂停。请检查账号状态并完成平台要求的验证，然后重新登录。</p>
   <form class="toolbar" id="search-form">
     <div class="search-field"><label for="query">搜索记录</label><input class="maibot-input" id="query" maxlength="80" type="search" placeholder="搜索主题、标题或内容"></div>
     <button class="maibot-button maibot-button-primary" type="submit">搜索</button>
@@ -126,6 +128,7 @@
         message('请先登录小红书，并启用私信、浏览或发布功能，再查看记录。');
         return;
       }
+      document.getElementById('browse-warning').hidden = !result.browse_paused;
       total = Number.isInteger(result.total) ? result.total : 0;
       const items = Array.isArray(result.items) ? result.items : [];
       statusLine.textContent = currentQuery ? `找到 ${total} 条记录` : `共 ${total} 条记录`;
