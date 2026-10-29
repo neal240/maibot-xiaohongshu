@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "description": "One-time interactive browser login helper",
+  "dependencies": {"playwright": "1.62.1"}
+}

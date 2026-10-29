@@ -1,0 +1,24 @@
+{
+  "schema_version": 2,
+  "required_capabilities": ["custom_pages"],
+  "pages": [
+    {
+      "id": "login",
+      "title": "小红书登录",
+      "placement": "sidebar",
+      "icon": "settings",
+      "mode": "custom",
+      "entry": "webui/login.html",
+      "layout": "document",
+      "queries": {"status": {"api": "login_status", "version": "1"},
+                  "publish_status": {"api": "publish_status", "version": "1"},
+                  "usage_status": {"api": "usage_status", "version": "1"}},
+      "actions": {
+        "start": {"api": "login_start", "version": "1", "confirmation": "开始登录会暂停当前小红书连接。确认继续？"},
+        "cancel": {"api": "login_cancel", "version": "1"},
+        "resume": {"api": "login_resume", "version": "1"},
+        "clear_publish": {"api": "publish_clear_uncertain", "version": "1", "confirmation": "请先在小红书确认上次图文是否已发布。解除暂停后未来可能再次发布，确认已检查？"}
+      }
+    }
+  ]
+}

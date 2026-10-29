@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+config.toml
+.venv/
+*.sqlite*
+session*.json
+.env
+node_modules/

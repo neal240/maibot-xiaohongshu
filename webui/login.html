@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>小红书登录</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: clamp(16px, 4vw, 32px); color: var(--maibot-foreground, #20242b); background: var(--maibot-background, #fff); font: 16px/1.55 var(--maibot-font-body, system-ui, sans-serif); }
+    main { max-width: 680px; margin: 0 auto; }
+    h1 { font-size: 1.5rem; line-height: 1.25; margin: 0 0 8px; }
+    p { margin: 0; }
+    .intro { color: var(--maibot-muted, #56606e); margin-bottom: 24px; }
+    .panel { border: 1px solid var(--maibot-border, #d8dce3); border-radius: var(--maibot-radius, 12px); padding: clamp(16px, 4vw, 24px); background: var(--maibot-surface, #fff); }
+    .eyebrow { font-size: .875rem; font-weight: 650; margin-bottom: 8px; }
+    #status { font-weight: 650; min-height: 1.55em; }
+    #detail { color: var(--maibot-muted, #56606e); margin-top: 6px; }
+    #feedback { margin-top: 8px; }
+    .qr { display: grid; place-items: center; width: min(100%, 260px); min-height: 260px; margin: 22px auto; padding: 14px; border-radius: 12px; background: #fff; }
+    .qr img { width: 100%; height: auto; max-width: 220px; image-rendering: pixelated; }
+    .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
+    button { min-height: 44px; padding: 0 16px; cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    button:focus-visible { outline: 3px solid var(--maibot-primary, #4361cf); outline-offset: 3px; }
+    #helper { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--maibot-border, #d8dce3); }
+    #helper h2 { font-size: 1rem; margin: 0 0 6px; }
+    #helper p { color: var(--maibot-muted, #56606e); }
+    .publish-panel { margin-top: 20px; }
+    .publish-panel h2 { font-size: 1rem; margin: 0 0 8px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body class="maibot-page">
+<main>
+  <h1>小红书登录</h1>
+  <p class="intro">连接麦麦要使用的小红书账号。登录状态保存在这台麦麦服务器的插件数据目录。</p>
+  <section class="panel" aria-labelledby="status-label">
+    <p class="eyebrow" id="status-label">账号连接</p>
+    <p id="status" role="status" aria-live="polite" aria-atomic="true">正在读取状态…</p>
+    <p id="detail"></p>
+    <p id="feedback" role="alert"></p>
+    <div class="qr" id="qr-box" hidden><img id="qr" alt="请使用小红书 App 扫描的登录二维码" width="220" height="220"></div>
+    <div class="actions">
+      <button class="maibot-button maibot-button-primary" id="start" type="button" disabled>扫码登录</button>
+      <button class="maibot-button" id="cancel" type="button" hidden>取消登录</button>
+      <button class="maibot-button" id="resume" type="button" hidden>使用已保存会话</button>
+    </div>
+    <div id="helper" hidden>
+      <h2>需要人工处理</h2>
+      <p>小红书要求额外验证。请在自己的电脑上正常登录小红书，并使用插件的浏览器登录助手导入会话。操作步骤见插件说明；完成后点击“使用已保存会话”。</p>
+    </div>
+  </section>
+  <section class="panel publish-panel" aria-labelledby="publish-heading">
+    <h2 id="publish-heading">图文发布状态</h2>
+    <p id="publish-status" role="status" aria-live="polite">正在读取状态…</p>
+    <button class="maibot-button" id="clear-publish" type="button" hidden>已检查，解除发布暂停</button>
+  </section>
+  <section class="panel publish-panel" aria-labelledby="usage-heading">
+    <h2 id="usage-heading">今日模型用量</h2>
+    <p id="usage-status" role="status" aria-live="polite">正在读取状态…</p>
+  </section>
+</main>
+<script>
+  const status = document.getElementById('status');
+  const detail = document.getElementById('detail');
+  const feedback = document.getElementById('feedback');
+  const qr = document.getElementById('qr');
+  const qrBox = document.getElementById('qr-box');
+  const start = document.getElementById('start');
+  const cancel = document.getElementById('cancel');
+  const resume = document.getElementById('resume');
+  const helper = document.getElementById('helper');
+  const publishStatus = document.getElementById('publish-status');
+  const clearPublish = document.getElementById('clear-publish');
+  const usageStatus = document.getElementById('usage-status');
+  const active = new Set(['starting', 'waiting_scan', 'waiting_confirm', 'verifying', 'cancelling']);
+  const labels = {
+    idle: ['尚未开始登录', '点击“扫码登录”生成二维码。'],
+    starting: ['正在准备二维码', '请稍候。'],
+    waiting_scan: ['请使用小红书 App 扫码', '二维码会在一段时间后失效。'],
+    waiting_confirm: ['请在手机上确认登录', '确认后请等待连接结果。'],
+    verifying: ['正在验证账号', '请稍候。'],
+    logged_in: ['登录成功', '账号会话已保存。请继续配置私信白名单。'],
+    verification_required: ['需要人工验证', '已停止自动登录，原有会话没有被覆盖。'],
+    expired: ['二维码已失效', '可以重新生成二维码。'],
+    cancelling: ['正在取消', '请稍候。'],
+    cancelled: ['已取消登录', '原有会话没有被覆盖。'],
+    error: ['登录未完成', '请检查网络及插件日志，或使用浏览器登录助手。'],
+    unavailable: ['登录组件不可用', '请确认插件已启用。']
+  };
+  let state = {phase: 'unavailable', saved_session: false};
+  let busy = false;
+  let timer;
+  function render(next) {
+    state = next || {phase: 'unavailable'};
+    const message = state.phase === 'idle' && state.saved_session
+      ? ['已有保存的会话', '会话是否仍有效需连接后验证；也可以重新扫码登录其他账号。']
+      : (labels[state.phase] || labels.error);
+    if (status.textContent !== message[0]) status.textContent = message[0];
+    const details = state.gateway_restart_failed ? '账号已保存，但私信网关未能启动，请检查插件状态。' : message[1];
+    if (detail.textContent !== details) detail.textContent = details;
+    const isActive = active.has(state.phase);
+    start.disabled = busy || isActive;
+    cancel.hidden = !isActive;
+    cancel.disabled = busy || state.phase === 'cancelling';
+    resume.hidden = !state.saved_session || isActive || state.phase === 'logged_in';
+    resume.disabled = busy;
+    helper.hidden = !['verification_required', 'error'].includes(state.phase);
+    const image = typeof state.qr_image === 'string' && state.qr_image.startsWith('data:image/png;base64,') ? state.qr_image : '';
+    qrBox.hidden = !image;
+    if (image && qr.getAttribute('src') !== image) qr.src = image;
+    else if (!image) qr.removeAttribute('src');
+  }
+  async function refresh() {
+    try { render(await window.maibot.query('status')); }
+    catch (_) { render({phase: 'unavailable'}); }
+    try {
+      const publishing = await window.maibot.query('publish_status');
+      const blocked = ['submitting', 'uncertain'].includes(publishing.state);
+      publishStatus.textContent = blocked ? '上次提交结果待确认，自动发布已暂停。请先在小红书检查。'
+        : publishing.state === 'published' ? '最近一次图文提交已确认。'
+        : publishing.state === 'idle' ? '暂无图文发布记录。' : '连接小红书后显示发布状态。';
+      clearPublish.hidden = !blocked;
+    } catch (_) { publishStatus.textContent = '暂时无法读取发布状态。'; }
+    try {
+      const usage = await window.maibot.query('usage_status');
+      if (usage.available && usage.browse && usage.publish) {
+        const b = usage.browse, p = usage.publish;
+        const unknown = b.unknown_calls + p.unknown_calls;
+        usageStatus.textContent = `${usage.date}：浏览 ${b.total_tokens} Token（${b.calls} 次），图文规划 ${p.total_tokens} Token（${p.calls} 次）。${unknown ? `其中 ${unknown} 次未返回用量，实际消耗可能更高。` : ''}不含私信对话和图片理解。`;
+      } else usageStatus.textContent = '连接小红书后显示插件模型用量。';
+    } catch (_) { usageStatus.textContent = '暂时无法读取模型用量。'; }
+    clearTimeout(timer);
+    timer = setTimeout(refresh, 3000);
+  }
+  async function action(name) {
+    feedback.textContent = '';
+    busy = true; render(state);
+    try {
+      const result = await window.maibot.action(name);
+      if (name === 'resume') feedback.textContent = result.started ? '正在恢复小红书连接。' : (result.reason === 'nothing_enabled' ? '请先配置白名单、浏览或发布功能。' : '插件未启用，请先在插件管理中启用。');
+      else if (name === 'clear_publish') feedback.textContent = result.cleared ? '已解除发布暂停。' : '发布状态未改变。';
+      else render(result);
+    } catch (_) { feedback.textContent = '操作未完成，请检查插件状态后重试。'; }
+    finally { busy = false; render(state); }
+  }
+  start.addEventListener('click', () => action('start'));
+  cancel.addEventListener('click', () => action('cancel'));
+  resume.addEventListener('click', () => action('resume'));
+  clearPublish.addEventListener('click', () => action('clear_publish'));
+  window.maibot.ready.then(refresh).catch(() => render({phase: 'unavailable'}));
+</script>
+</body>
+</html>
