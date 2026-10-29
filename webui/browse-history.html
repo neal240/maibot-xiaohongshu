@@ -25,14 +25,18 @@
     #status { font-size: .875rem; }
     #records { display: grid; gap: 12px; }
     .record, .empty { border: 1px solid var(--maibot-border, #d8dce3); border-radius: var(--maibot-radius, 12px); padding: clamp(16px, 3vw, 22px); background: var(--maibot-surface, #fff); }
-    .record-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 5px 18px; }
+    .record > summary { display: flex; align-items: center; gap: 12px; list-style: none; cursor: pointer; }
+    .record > summary::-webkit-details-marker { display: none; }
+    .record > summary::after { content: '⌄'; margin-left: auto; color: var(--maibot-muted, #56606e); font-size: 1.2rem; }
+    .record[open] > summary::after { content: '⌃'; }
+    .record-heading { display: flex; flex: 1; min-width: 0; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+    .record-heading h2 { flex: 1 1 220px; min-width: 0; }
     .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 14px; color: var(--maibot-muted, #56606e); font-size: .875rem; }
     .tag { display: inline-block; padding: 2px 9px; border: 1px solid var(--maibot-border, #d8dce3); border-radius: 999px; }
     .label { margin-bottom: 4px; color: var(--maibot-muted, #56606e); font-size: .8125rem; font-weight: 650; }
     .copy { white-space: pre-wrap; overflow-wrap: anywhere; }
-    details { margin-top: 14px; border-top: 1px solid var(--maibot-border, #d8dce3); padding-top: 12px; }
-    summary { cursor: pointer; min-height: 32px; font-weight: 600; }
-    details .copy { margin-top: 8px; }
+    .record-content { margin-top: 14px; border-top: 1px solid var(--maibot-border, #d8dce3); padding-top: 12px; }
+    .record-content .label:not(:first-child) { margin-top: 14px; }
     a { color: var(--maibot-primary, #3553bd); text-decoration-thickness: 1px; text-underline-offset: 3px; }
     .link { display: inline-block; margin-top: 14px; }
     .paging { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 18px; }
@@ -84,28 +88,30 @@
     return Number.isFinite(d.getTime()) ? d.toLocaleString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '时间未知';
   }
   function showRecord(item) {
-    const card = node('article', 'record');
-    const head = node('div', 'record-top');
+    const card = node('details', 'record');
+    const toggle = node('summary', '');
+    const head = node('div', 'record-heading');
     head.append(node('h2', '', item.title || '早期记录（未保存标题）'));
-    head.append(node('time', 'muted', date(item.saved_at)));
-    card.append(head);
+    head.append(node('span', 'tag', '主题：' + (item.keyword || '未分类')));
+    toggle.append(head);
+    card.append(toggle);
+    const content = node('div', 'record-content');
     const meta = node('div', 'meta');
-    if (item.keyword) meta.append(node('span', 'tag', '主题：' + item.keyword));
+    meta.append(node('time', '', date(item.saved_at)));
     const state = item.status === 'complete' ? '已生成摘要' : item.status === 'failed' ? '摘要未生成' : '正在处理';
     meta.append(node('span', '', state));
-    card.append(meta);
-    card.append(node('p', 'label', '麦麦记下的摘要'));
-    card.append(node('p', 'copy', item.summary || '这篇笔记暂时没有可用摘要。'));
-    const details = node('details', '');
-    details.append(node('summary', '', '查看笔记正文'));
-    details.append(node('p', 'copy', item.body || '这条记录没有保存正文。'));
-    card.append(details);
+    content.append(meta);
+    content.append(node('p', 'label', '麦麦记下的摘要'));
+    content.append(node('p', 'copy', item.summary || '这篇笔记暂时没有可用摘要。'));
+    content.append(node('p', 'label', '笔记正文'));
+    content.append(node('p', 'copy', item.body || '这条记录没有保存正文。'));
     if (typeof item.note_id === 'string' && /^[0-9a-f]{24}$/.test(item.note_id)) {
       const link = node('a', 'link', '在小红书打开');
       link.href = 'https://www.xiaohongshu.com/explore/' + item.note_id;
       link.target = '_blank'; link.rel = 'noopener noreferrer';
-      card.append(link);
+      content.append(link);
     }
+    card.append(content);
     return card;
   }
   async function load() {
