@@ -19,6 +19,25 @@
         "resume": {"api": "login_resume", "version": "1"},
         "clear_publish": {"api": "publish_clear_uncertain", "version": "1", "confirmation": "请先在小红书确认上次图文是否已发布。解除暂停后未来可能再次发布，确认已检查？"}
       }
+    },
+    {
+      "id": "browse-history",
+      "title": "小红书浏览记录",
+      "placement": "sidebar",
+      "icon": "list",
+      "mode": "custom",
+      "entry": "webui/browse-history.html",
+      "layout": "document",
+      "queries": {
+        "history": {
+          "api": "browse_history",
+          "version": "1",
+          "parameters": {
+            "query": {"type": "string", "max_length": 80},
+            "offset": {"type": "integer", "minimum": 0, "maximum": 500}
+          }
+        }
+      }
     }
   ]
 }

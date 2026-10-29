@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>小红书浏览记录</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: clamp(18px, 4vw, 36px); color: var(--maibot-foreground, #20242b); background: var(--maibot-background, #fff); font: 16px/1.6 var(--maibot-font-body, system-ui, sans-serif); }
+    main { max-width: 840px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: clamp(1.4rem, 3vw, 1.75rem); line-height: 1.3; }
+    h2 { margin: 0; font-size: 1.05rem; line-height: 1.45; overflow-wrap: anywhere; }
+    p { margin: 0; }
+    .muted { color: var(--maibot-muted, #56606e); }
+    .intro { max-width: 64ch; margin-bottom: 24px; }
+    .toolbar { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; }
+    .search-field { flex: 1 1 250px; min-width: 0; }
+    label { display: block; margin-bottom: 5px; font-size: .875rem; font-weight: 650; }
+    input { width: 100%; min-height: 44px; padding: 9px 12px; font: inherit; color: inherit; background: var(--maibot-surface, #fff); border: 1px solid var(--maibot-border, #d8dce3); border-radius: 8px; }
+    button { min-height: 44px; padding: 8px 16px; font: inherit; color: inherit; background: var(--maibot-surface, #fff); border: 1px solid var(--maibot-border, #d8dce3); border-radius: 8px; cursor: pointer; }
+    button.maibot-button-primary { color: var(--maibot-primary-foreground, #fff); background: var(--maibot-primary, #3553bd); border-color: transparent; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    :focus-visible { outline: 3px solid var(--maibot-primary, #4361cf); outline-offset: 3px; }
+    .overview { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 26px 0 12px; }
+    #status { font-size: .875rem; }
+    #records { display: grid; gap: 12px; }
+    .record, .empty { border: 1px solid var(--maibot-border, #d8dce3); border-radius: var(--maibot-radius, 12px); padding: clamp(16px, 3vw, 22px); background: var(--maibot-surface, #fff); }
+    .record-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 5px 18px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 8px 0 14px; color: var(--maibot-muted, #56606e); font-size: .875rem; }
+    .tag { display: inline-block; padding: 2px 9px; border: 1px solid var(--maibot-border, #d8dce3); border-radius: 999px; }
+    .label { margin-bottom: 4px; color: var(--maibot-muted, #56606e); font-size: .8125rem; font-weight: 650; }
+    .copy { white-space: pre-wrap; overflow-wrap: anywhere; }
+    details { margin-top: 14px; border-top: 1px solid var(--maibot-border, #d8dce3); padding-top: 12px; }
+    summary { cursor: pointer; min-height: 32px; font-weight: 600; }
+    details .copy { margin-top: 8px; }
+    a { color: var(--maibot-primary, #3553bd); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+    .link { display: inline-block; margin-top: 14px; }
+    .paging { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 18px; }
+    .paging span { text-align: center; font-size: .875rem; color: var(--maibot-muted, #56606e); }
+    .footnote { margin-top: 24px; font-size: .875rem; }
+    [hidden] { display: none !important; }
+    @media (max-width: 480px) { .toolbar button { flex: 1 1 auto; } .overview { align-items: start; flex-direction: column; gap: 3px; } }
+  </style>
+</head>
+<body class="maibot-page">
+<main>
+  <header>
+    <h1>小红书浏览记录</h1>
+    <p class="intro muted">看看麦麦读过哪些笔记，以及她记下了什么。这里记录已打开并尝试总结的笔记，保留最近 30 天，最多 500 条。</p>
+  </header>
+  <form class="toolbar" id="search-form">
+    <div class="search-field"><label for="query">搜索记录</label><input class="maibot-input" id="query" maxlength="80" type="search" placeholder="搜索主题、标题或内容"></div>
+    <button class="maibot-button maibot-button-primary" type="submit">搜索</button>
+    <button class="maibot-button" type="button" id="refresh">刷新</button>
+  </form>
+  <div class="overview"><h2>阅读记录</h2><p id="status" class="muted" role="status" aria-live="polite">正在读取…</p></div>
+  <div id="records"></div>
+  <nav class="paging" id="paging" aria-label="浏览记录翻页" hidden>
+    <button class="maibot-button" id="previous" type="button">上一页</button>
+    <span id="page-label"></span>
+    <button class="maibot-button" id="next" type="button">下一页</button>
+  </nav>
+  <p class="footnote muted">较早的记录只保留了摘要，无法补回原文；新记录展示接口返回的标题和正文，部分内容可能不完整。打开笔记可能需要登录小红书。</p>
+</main>
+<script>
+  const records = document.getElementById('records');
+  const statusLine = document.getElementById('status');
+  const paging = document.getElementById('paging');
+  const previous = document.getElementById('previous');
+  const next = document.getElementById('next');
+  const query = document.getElementById('query');
+  let offset = 0, currentQuery = '', requestNumber = 0, total = 0;
+  const size = 10;
+
+  function node(tag, className, text) {
+    const element = document.createElement(tag);
+    if (className) element.className = className;
+    if (text !== undefined) element.textContent = text;
+    return element;
+  }
+  function message(text) { records.replaceChildren(node('p', 'empty muted', text)); }
+  function date(value) {
+    const d = new Date(Number(value) * 1000);
+    return Number.isFinite(d.getTime()) ? d.toLocaleString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '时间未知';
+  }
+  function showRecord(item) {
+    const card = node('article', 'record');
+    const head = node('div', 'record-top');
+    head.append(node('h2', '', item.title || '早期记录（未保存标题）'));
+    head.append(node('time', 'muted', date(item.saved_at)));
+    card.append(head);
+    const meta = node('div', 'meta');
+    if (item.keyword) meta.append(node('span', 'tag', '主题：' + item.keyword));
+    const state = item.status === 'complete' ? '已生成摘要' : item.status === 'failed' ? '摘要未生成' : '正在处理';
+    meta.append(node('span', '', state));
+    card.append(meta);
+    card.append(node('p', 'label', '麦麦记下的摘要'));
+    card.append(node('p', 'copy', item.summary || '这篇笔记暂时没有可用摘要。'));
+    const details = node('details', '');
+    details.append(node('summary', '', '查看笔记正文'));
+    details.append(node('p', 'copy', item.body || '这条记录没有保存正文。'));
+    card.append(details);
+    if (typeof item.note_id === 'string' && /^[0-9a-f]{24}$/.test(item.note_id)) {
+      const link = node('a', 'link', '在小红书打开');
+      link.href = 'https://www.xiaohongshu.com/explore/' + item.note_id;
+      link.target = '_blank'; link.rel = 'noopener noreferrer';
+      card.append(link);
+    }
+    return card;
+  }
+  async function load() {
+    const request = ++requestNumber;
+    statusLine.textContent = '正在读取…';
+    previous.disabled = true; next.disabled = true;
+    try {
+      const result = await window.maibot.query('history', {query: currentQuery, offset});
+      if (request !== requestNumber) return;
+      if (!result || !result.available) {
+        statusLine.textContent = '暂时无法读取'; paging.hidden = true;
+        message('请先登录小红书，并启用私信、浏览或发布功能，再查看记录。');
+        return;
+      }
+      total = Number.isInteger(result.total) ? result.total : 0;
+      const items = Array.isArray(result.items) ? result.items : [];
+      statusLine.textContent = currentQuery ? `找到 ${total} 条记录` : `共 ${total} 条记录`;
+      if (!items.length) message(currentQuery ? '没有找到匹配的记录，试试其他关键词。' : '还没有阅读记录。开启主动浏览后，麦麦读过的笔记会出现在这里。');
+      else records.replaceChildren(...items.map(showRecord));
+      paging.hidden = total <= size;
+      previous.disabled = offset === 0;
+      next.disabled = offset + size >= total;
+      document.getElementById('page-label').textContent = `第 ${Math.floor(offset / size) + 1} 页`;
+    } catch (_) {
+      if (request !== requestNumber) return;
+      statusLine.textContent = '读取失败'; paging.hidden = true;
+      message('暂时无法读取记录，请稍后刷新或检查插件状态。');
+    }
+  }
+  document.getElementById('search-form').addEventListener('submit', event => {
+    event.preventDefault(); currentQuery = query.value.trim(); offset = 0; load();
+  });
+  document.getElementById('refresh').addEventListener('click', () => load());
+  previous.addEventListener('click', () => { offset = Math.max(0, offset - size); load(); });
+  next.addEventListener('click', () => { if (offset + size < total) { offset += size; load(); } });
+  window.maibot.ready.then(load).catch(() => { statusLine.textContent = '页面连接失败'; message('请返回插件页面后重试。'); });
+</script>
+</body>
+</html>

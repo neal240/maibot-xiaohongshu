@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "id": "com.neal240.xiaohongshu",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "name": "麦麦小红书",
   "description": "让麦麦浏览小红书、阅读私信，并规划发布图文。",
   "author": {"name": "Neal240", "url": "https://github.com/neal240"},

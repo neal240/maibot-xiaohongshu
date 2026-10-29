@@ -91,6 +91,9 @@ async def main():
             assert not (await instance.send_to_platform(outgoing))['success']
             await instance._browse_once()
             assert instance._memory.contains(ME, NOTE)
+            history = await instance.browse_history(query='猫', offset=0)
+            assert history['available'] and history['total'] == 1 and history['items'][0]['title'] == '猫的日常'
+            assert history['items'][0]['body'] == '一只猫' and history['items'][0]['status'] == 'complete'
             assert '一只猫' in (await instance.search_memory('猫'))['content']
             usage = await instance.usage_status()
             assert usage['browse']['calls'] == 2 and usage['browse']['total_tokens'] == 40
