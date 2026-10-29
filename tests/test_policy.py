@@ -24,6 +24,35 @@ class PolicyTests(unittest.TestCase):
             with self.assertRaises(ValueError): Policy(frozenset(), p)
         with self.assertRaises(ValueError): Policy(frozenset({'123456'}), 1)
 
+    def test_all_mode_still_requires_valid_matching_private_users(self):
+        p = Policy(frozenset(), 0.5, allow_all=True)
+        self.assertTrue(p.permits(C, C, group=False))
+        self.assertFalse(p.permits(C, C, group=True))
+        self.assertFalse(p.permits(C, B, group=False))
+        self.assertFalse(p.permits('not-a-user', 'not-a-user', group=False))
+        self.assertFalse(Policy(frozenset(), 0).permits(C, C, group=False))
+
+    def test_all_mode_baseline_survives_restart_and_switch_resets_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'a.sqlite'
+            db = Decisions(path)
+            self.assertEqual(db.sync_mode(A, 'all', 100), 100)
+            self.assertEqual(db.ensure_baselines(A, frozenset({B}), 100), {B: 100})
+            db.advance_baseline(A, B, 150)
+            db.close()
+            db = Decisions(path)
+            self.assertEqual(db.sync_mode(A, 'all', 200), 100)
+            self.assertEqual(db.ensure_baselines(A, frozenset({B, C}), 100), {B: 150, C: 100})
+            self.assertEqual(db.ensure_baselines(A, frozenset({C}), 100), {C: 100})
+            self.assertEqual(db.ensure_baselines(A, frozenset({B}), 100), {B: 150})
+            self.assertEqual(db.sync_mode(A, 'whitelist', 300), 300)
+            self.assertEqual(db.sync_baselines(A, frozenset({B}), 300), {B: 300})
+            self.assertEqual(db.sync_mode(A, 'all', 400), 400)
+            self.assertEqual(db.ensure_baselines(A, frozenset({B}), 400), {B: 400})
+            db.disable_mode(A)
+            self.assertEqual(db.sync_mode(A, 'all', 500), 500)
+            db.close()
+
     def test_restart_deduplication_and_no_nonwhitelist_persistence(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'state.sqlite'

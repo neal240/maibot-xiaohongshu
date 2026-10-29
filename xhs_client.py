@@ -1,4 +1,4 @@
-"""Experimental client with explicit whitelist checks on every DM operation."""
+"""Experimental client with explicit private-message scope checks."""
 from __future__ import annotations
 
 from typing import Any
@@ -193,6 +193,33 @@ class ReadOnlyClient:
         if user.get('guest') is not False or not isinstance(user_id, str) or not re.fullmatch(r'[0-9a-f]{24}', user_id):
             raise PlatformError('session is not authenticated')
         return user_id
+
+    def private_conversations(self, account_id: str, *, max_pages: int = 10) -> frozenset[str]:
+        if not self._policy.allow_all: raise PermissionError('all-users mode is disabled')
+        if not re.fullmatch(r'[0-9a-f]{24}', account_id) or not 1 <= max_pages <= 10:
+            raise ValueError('invalid account or page limit')
+        users = set()
+        for page in range(max_pages):
+            response = self._get('/api/im/web/v3/chats',
+                                 {'limit': 20, 'complete': 'true', 'page': page, 'source': 'pc'})
+            data = response.get('data')
+            if not isinstance(data, dict) or not isinstance(data.get('chats'), list):
+                raise PlatformError('invalid private conversation list')
+            chats = data['chats']
+            total = data.get('total')
+            if not isinstance(total, int) or isinstance(total, bool) or total < 0 or total > 20 * max_pages:
+                raise PlatformError('private conversation list exceeds bounded limit or has no total')
+            for item in chats:
+                if not isinstance(item, dict) or item.get('user_id') != account_id:
+                    raise PlatformError('invalid private conversation account')
+                user = item.get('chat_user_id')
+                if not isinstance(user, str) or not re.fullmatch(r'[0-9a-f]{24}', user) or user == account_id:
+                    raise PlatformError('invalid private conversation user')
+                users.add(user)
+            if len(users) > total: raise PlatformError('inconsistent private conversation count')
+            if len(users) == total: return frozenset(users)
+            if len(chats) < 20: raise PlatformError('incomplete private conversation list')
+        raise PlatformError('private conversation list exceeds bounded page limit')
 
     def history(self, user_id: str, *, limit: int = 5) -> list[dict[str, Any]]:
         if not self._policy.permits(user_id, user_id, group=False):

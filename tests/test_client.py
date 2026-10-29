@@ -38,6 +38,35 @@ class ClientTests(unittest.TestCase):
         self.assertEqual(client.history(USER), [])
         self.assertEqual(len(calls), 1)
 
+    def test_private_conversations_are_only_available_in_all_mode(self):
+        account = 'a' * 24
+        calls = []
+        def request(*args, **kwargs):
+            calls.append(kwargs['params']['page'])
+            return Response(200, {'success': True, 'data': {'total': 1, 'chats': [
+                {'user_id': account, 'chat_user_id': OTHER, 'last_msg_content': 'ignored'}]}})
+        client = ReadOnlyClient(STATE, Policy(frozenset({USER}), 1), signer=Signer(), request=request)
+        with self.assertRaises(PermissionError): client.private_conversations(account)
+        self.assertEqual(calls, [])
+        client = ReadOnlyClient(STATE, Policy(frozenset(), 1, allow_all=True), signer=Signer(), request=request)
+        self.assertEqual(client.private_conversations(account), frozenset({OTHER}))
+        self.assertEqual(calls, [0])
+
+    def test_all_mode_list_paginates_and_fails_closed_on_invalid_scope(self):
+        account = 'a' * 24
+        users = [format(i, '024x') for i in range(21)]
+        def request(*args, **kwargs):
+            page = kwargs['params']['page']
+            return Response(200, {'success': True, 'data': {'total': 21, 'chats': [
+                {'user_id': account, 'chat_user_id': user} for user in users[page*20:(page+1)*20]]}})
+        client = ReadOnlyClient(STATE, Policy(frozenset(), 1, allow_all=True), signer=Signer(), request=request)
+        self.assertEqual(client.private_conversations(account), frozenset(users))
+        def wrong_account(*args, **kwargs):
+            return Response(200, {'success': True, 'data': {'total': 1, 'chats': [
+                {'user_id': USER, 'chat_user_id': OTHER}]}})
+        client = ReadOnlyClient(STATE, Policy(frozenset(), 1, allow_all=True), signer=Signer(), request=wrong_account)
+        with self.assertRaises(PlatformError): client.private_conversations(account)
+
     def test_rejection_stops_client(self):
         calls = []
         def request(*args, **kwargs):

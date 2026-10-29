@@ -29,6 +29,9 @@ class Gateway:
 class FakeClient:
     def __init__(self, state, policy): pass
     def identity(self): return ME
+    def private_conversations(self, account):
+        assert account == ME
+        return frozenset({USER})
     def history(self, user, *, limit):
         return [{'sender_id': USER, 'receiver_id': ME, 'group_chat': False,
                  'id': 'one', 'created_at': int(time.time() * 1000) + 100,
@@ -120,6 +123,26 @@ async def main():
             await instance._plan_publish()
             assert len(FakeCreator.calls) == 2
             assert not list((root / 'temp').glob('*.jpg'))
+            await instance.on_unload()
+    with tempfile.TemporaryDirectory() as d:
+        root = Path(d)
+        (root / 'auth').mkdir()
+        (root / 'auth' / 'session.json').write_text(json.dumps({'version': 1, 'shared_cookies': {}}))
+        gateway = Gateway()
+        context = SimpleNamespace(paths=SimpleNamespace(data_dir=root, runtime_dir=root / 'temp'), gateway=gateway,
+                                  llm=FakeLLM(), logger=logging.getLogger('test'))
+        instance = plugin.create_plugin()
+        instance._set_context(context)
+        instance.set_plugin_config({'plugin': {'enabled': True, 'config_version': '1.0.0'},
+            'dm': {'mode': 'all', 'allowed_users': [], 'reply_probability': 0, 'poll_seconds': 30}})
+        with patch.object(plugin, 'ReadOnlyClient', FakeClient):
+            await instance.on_load()
+            await asyncio.wait_for(gateway.event.wait(), 5)
+            assert len(gateway.messages) == 1 and gateway.messages[0]['message_info']['user_info']['user_id'] == USER
+            outgoing = {'platform': 'xiaohongshu', 'account_id': ME,
+                'message_info': {'additional_config': {'platform_io_target_user_id': USER}},
+                'raw_message': [{'type': 'text', 'data': 'reply'}]}
+            assert not (await instance.send_to_platform(outgoing))['success']
             await instance.on_unload()
     print('SDK_FEATURES_FAKE_HOST_TEST: PASS')
 

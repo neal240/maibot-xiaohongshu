@@ -46,6 +46,7 @@ class PluginSection(PluginConfigBase):
 
 
 class DMSection(PluginConfigBase):
+    mode: Literal['whitelist', 'all'] = Field(default='whitelist', description='私信范围：whitelist 仅白名单，all 所有单聊用户')
     allowed_users: list[str] = Field(default_factory=list, description='允许私信的稳定用户 ID')
     reply_probability: float = Field(default=0.0, ge=0, le=1, description='私信回复抽样概率')
     poll_seconds: int = Field(default=60, ge=30, le=3600, description='白名单会话轮询间隔')
@@ -142,7 +143,7 @@ class XiaohongshuPlugin(MaiBotPlugin):
         if self._login is None or self._login.busy: raise RuntimeError('请等待当前登录结束')
         if not self._login.status()['saved_session']: raise RuntimeError('没有可用的已保存会话')
         if not self.config.plugin.enabled: return {'started': False, 'reason': 'disabled'}
-        if not self.config.dm.allowed_users and not self.config.browse.enabled and not self.config.publish.enabled:
+        if self.config.dm.mode == 'whitelist' and not self.config.dm.allowed_users and not self.config.browse.enabled and not self.config.publish.enabled:
             return {'started': False, 'reason': 'nothing_enabled'}
         await self._resume_after_login()
         return {'started': True}
@@ -175,8 +176,11 @@ class XiaohongshuPlugin(MaiBotPlugin):
         async with self._lock:
             self._client = None
             if self._decisions is not None:
-                users = frozenset(self.config.dm.allowed_users) if self.config.plugin.enabled else frozenset()
-                try: self._decisions.sync_baselines(self._account, users, int(time.time() * 1000))
+                try:
+                    if not self.config.plugin.enabled:
+                        self._decisions.disable_mode(self._account)
+                    elif self.config.dm.mode == 'whitelist' and not self._policy.allow_all:
+                        self._decisions.sync_baselines(self._account, frozenset(self.config.dm.allowed_users), int(time.time() * 1000))
                 except ValueError: pass
                 self._decisions.close()
                 self._decisions = None
@@ -196,8 +200,9 @@ class XiaohongshuPlugin(MaiBotPlugin):
 
     async def _run(self):
         try:
-            self._policy = Policy(frozenset(self.config.dm.allowed_users), self.config.dm.reply_probability)
-            if not self._policy.allowed_users and not self.config.browse.enabled and not self.config.publish.enabled:
+            self._policy = Policy(frozenset(self.config.dm.allowed_users), self.config.dm.reply_probability,
+                                  allow_all=self.config.dm.mode == 'all')
+            if not self._policy.allow_all and not self._policy.allowed_users and not self.config.browse.enabled and not self.config.publish.enabled:
                 self.ctx.logger.info('小红书私信与浏览均未启用')
                 return
             data_dir = self.ctx.paths.data_dir
@@ -211,11 +216,13 @@ class XiaohongshuPlugin(MaiBotPlugin):
             self._memory = NoteMemory(data_dir / 'note-memory.sqlite3')
             self._publication = PublishState(data_dir / 'publish-state.sqlite3')
             self._usage = Usage(data_dir / 'model-usage.sqlite3')
-            baselines = self._decisions.sync_baselines(self._account, self._policy.allowed_users,
-                                                       int(time.time() * 1000))
+            now_ms = int(time.time() * 1000)
+            access_since = self._decisions.sync_mode(self._account, self.config.dm.mode, now_ms)
+            baselines = {} if self._policy.allow_all else self._decisions.sync_baselines(
+                self._account, self._policy.allowed_users, now_ms)
             if self._decisions.uncertain_count(self._account):
                 self.ctx.logger.warning('存在投递结果不确定的私信；为避免重复，未自动重投')
-            if self._policy.allowed_users:
+            if self._policy.allow_all or self._policy.allowed_users:
                 ready = await self.ctx.gateway.update_state(gateway_name=GATEWAY, ready=True,
                                                             platform=PLATFORM, account_id=self._account)
                 if not ready: raise RuntimeError('host rejected gateway state')
@@ -224,7 +231,7 @@ class XiaohongshuPlugin(MaiBotPlugin):
             next_dm = time.monotonic()
             while True:
                 if time.monotonic() >= next_dm:
-                    await self._poll_dm(baselines)
+                    await self._poll_dm(baselines, access_since)
                     next_dm = time.monotonic() + self.config.dm.poll_seconds
                 if self.config.browse.enabled and time.monotonic() >= next_browse:
                     try:
@@ -252,8 +259,14 @@ class XiaohongshuPlugin(MaiBotPlugin):
             self._client = None
             await self.ctx.gateway.update_state(gateway_name=GATEWAY, ready=False)
 
-    async def _poll_dm(self, baselines: dict[str, int]) -> None:
-        for user in sorted(self._policy.allowed_users):
+    async def _poll_dm(self, baselines: dict[str, int], access_since: int = 0) -> None:
+        if self._policy.allow_all:
+            async with self._lock:
+                users = await asyncio.to_thread(self._client.private_conversations, self._account)
+            baselines.update(self._decisions.ensure_baselines(self._account, users, access_since))
+        else:
+            users = self._policy.allowed_users
+        for user in sorted(users):
             async with self._lock:
                 messages = await asyncio.to_thread(self._client.history_since, user, baselines[user])
             def created(item):

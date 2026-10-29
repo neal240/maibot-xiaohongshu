@@ -19,15 +19,18 @@ _ID = re.compile(r"^[0-9a-f]{24}$")
 class Policy:
     allowed_users: frozenset[str]
     reply_probability: float = 0.0
+    allow_all: bool = False
 
     def __post_init__(self) -> None:
         if any(not _ID.fullmatch(user) for user in self.allowed_users):
             raise ValueError('white list must contain stable 24-character user IDs')
+        if not isinstance(self.allow_all, bool): raise ValueError('invalid DM mode')
         if not math.isfinite(self.reply_probability) or not 0 <= self.reply_probability <= 1:
             raise ValueError('reply probability must be between 0 and 1')
 
     def permits(self, sender: str, conversation_user: str, *, group: bool) -> bool:
-        return not group and sender == conversation_user and sender in self.allowed_users
+        return (group is False and isinstance(sender, str) and bool(_ID.fullmatch(sender))
+                and sender == conversation_user and (self.allow_all or sender in self.allowed_users))
 
 
 class Decisions:
@@ -44,12 +47,41 @@ class Decisions:
             account TEXT NOT NULL, user_id TEXT NOT NULL, started_ms INTEGER NOT NULL,
             PRIMARY KEY (account, user_id)
         )''')
+        self.conn.execute('''CREATE TABLE IF NOT EXISTS access_modes (
+            account TEXT PRIMARY KEY, mode TEXT NOT NULL, started_ms INTEGER NOT NULL
+        )''')
         if 'inflight' not in {row[1] for row in self.conn.execute('PRAGMA table_info(decisions)')}:
             self.conn.execute('ALTER TABLE decisions ADD COLUMN inflight INTEGER NOT NULL DEFAULT 0')
         self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()
+
+    def sync_mode(self, account: str, mode: str, now_ms: int) -> int:
+        if not _ID.fullmatch(account) or mode not in {'whitelist', 'all'}:
+            raise ValueError('invalid account or mode')
+        with self.conn:
+            row = self.conn.execute('SELECT mode,started_ms FROM access_modes WHERE account=?', (account,)).fetchone()
+            if row and row[0] == mode: return row[1]
+            if row or mode == 'all':
+                self.conn.execute('DELETE FROM baselines WHERE account=?', (account,))
+            self.conn.execute('INSERT OR REPLACE INTO access_modes VALUES(?,?,?)', (account, mode, now_ms))
+            return now_ms
+
+    def disable_mode(self, account: str) -> None:
+        if not _ID.fullmatch(account): raise ValueError('invalid account')
+        with self.conn:
+            self.conn.execute('DELETE FROM access_modes WHERE account=?', (account,))
+            self.conn.execute('DELETE FROM baselines WHERE account=?', (account,))
+
+    def ensure_baselines(self, account: str, users: frozenset[str], started_ms: int) -> dict[str, int]:
+        if not _ID.fullmatch(account) or any(not _ID.fullmatch(user) for user in users):
+            raise ValueError('invalid account or conversation')
+        with self.conn:
+            for user in users:
+                self.conn.execute('INSERT OR IGNORE INTO baselines VALUES(?,?,?)', (account, user, started_ms))
+            all_baselines = dict(self.conn.execute('SELECT user_id,started_ms FROM baselines WHERE account=?', (account,)))
+            return {user: all_baselines[user] for user in users}
 
     def sync_baselines(self, account: str, users: frozenset[str], now_ms: int) -> dict[str, int]:
         if not _ID.fullmatch(account): raise ValueError('invalid account')
