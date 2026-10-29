@@ -21,6 +21,25 @@
       }
     },
     {
+      "id": "identity-binding",
+      "title": "跨平台身份关联",
+      "placement": "sidebar",
+      "icon": "settings",
+      "mode": "custom",
+      "entry": "webui/identity-binding.html",
+      "layout": "document",
+      "queries": {"identities": {"api": "identity_list", "version": "1"}},
+      "actions": {
+        "bind": {"api": "identity_bind", "version": "1", "parameters": {
+          "xhs_user": {"type": "string", "max_length": 24, "required": true},
+          "qq_user": {"type": "string", "max_length": 20, "required": true}
+        }},
+        "unbind": {"api": "identity_unbind", "version": "1", "parameters": {
+          "xhs_user": {"type": "string", "max_length": 24, "required": true}
+        }}
+      }
+    },
+    {
       "id": "browse-history",
       "title": "小红书浏览记录",
       "placement": "sidebar",

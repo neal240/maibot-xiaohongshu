@@ -54,11 +54,11 @@
     <p class="intro muted">看看麦麦读过哪些笔记，以及她记下了什么。这里记录已打开并尝试总结的笔记，保留最近 30 天，最多 500 条。</p>
   </header>
   <p id="browse-warning" class="warning" role="status" hidden>小红书未接受浏览请求，主动浏览已暂停。请检查账号状态并完成平台要求的验证，然后重新登录。</p>
-  <form class="toolbar" id="search-form">
+  <div class="toolbar" id="search-form">
     <div class="search-field"><label for="query">搜索记录</label><input class="maibot-input" id="query" maxlength="80" type="search" placeholder="搜索主题、标题或内容"></div>
-    <button class="maibot-button maibot-button-primary" type="submit">搜索</button>
+    <button class="maibot-button maibot-button-primary" id="search" type="button">搜索</button>
     <button class="maibot-button" type="button" id="refresh">刷新</button>
-  </form>
+  </div>
   <div class="overview"><h2>阅读记录</h2><p id="status" class="muted" role="status" aria-live="polite">正在读取…</p></div>
   <div id="records"></div>
   <nav class="paging" id="paging" aria-label="浏览记录翻页" hidden>
@@ -144,9 +144,9 @@
       message('暂时无法读取记录，请稍后刷新或检查插件状态。');
     }
   }
-  document.getElementById('search-form').addEventListener('submit', event => {
-    event.preventDefault(); currentQuery = query.value.trim(); offset = 0; load();
-  });
+  function search() { currentQuery = query.value.trim(); offset = 0; load(); }
+  document.getElementById('search').addEventListener('click', search);
+  query.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); search(); } });
   document.getElementById('refresh').addEventListener('click', () => load());
   previous.addEventListener('click', () => { offset = Math.max(0, offset - size); load(); });
   next.addEventListener('click', () => { if (offset + size < total) { offset += size; load(); } });

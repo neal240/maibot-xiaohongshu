@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "id": "com.neal240.xiaohongshu",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "name": "麦麦小红书",
   "description": "让麦麦浏览小红书、阅读私信，并规划发布图文。",
   "author": {"name": "Neal240", "url": "https://github.com/neal240"},
@@ -18,6 +18,6 @@
     {"type": "python_package", "name": "pillow", "version_spec": ">=12.3.0,<14.0.0"},
     {"type": "python_package", "name": "cryptography", "version_spec": ">=50.0.1,<51.0.0"}
   ],
-  "capabilities": ["llm.generate"],
+  "capabilities": ["llm.generate", "chat.get_private_streams", "chat.open_session", "person.get_id", "person.get_value", "maisaka.context.append"],
   "i18n": {"default_locale": "zh-CN"}
 }
