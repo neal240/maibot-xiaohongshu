@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "id": "com.neal240.xiaohongshu",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "name": "小红书适配器（开发版）",
   "description": "小红书白名单私信、兴趣浏览与图文发布适配器，开发验证版本。",
   "author": {"name": "Neal240", "url": "https://github.com/neal240"},
