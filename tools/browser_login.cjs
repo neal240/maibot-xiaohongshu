@@ -29,7 +29,7 @@ async function main() {
   try {
     const page = await context.newPage();
     await page.goto('https://www.xiaohongshu.com/explore', {waitUntil: 'domcontentloaded', timeout: 30000});
-    console.log('请在新窗口登录麦麦账号并完成网页要求的验证，完成后在此终端按回车。');
+    console.log('请在新窗口登录小红书账号并完成网页要求的验证，完成后在此终端按回车。');
     const input = readline.createInterface({input: process.stdin, output: process.stdout});
     await new Promise(resolve => input.question('', resolve));
     input.close();
