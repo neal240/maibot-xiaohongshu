@@ -6,17 +6,17 @@ import re
 from typing import Any
 if __package__:
     from .xhs_policy import Decisions, Policy
-    from .notes import shared_reference
+    from .notes import shared_reference, image_url
 else:
     from xhs_policy import Decisions, Policy
-    from notes import shared_reference
+    from notes import shared_reference, image_url
 
 _ID = re.compile(r'^[0-9a-f]{24}$')
 
 
 def prepare_text(message: dict[str, Any], account_id: str, conversation_user: str,
                  policy: Policy, decisions: Decisions, *, not_before_ms: int,
-                 on_note=None) -> dict | None:
+                 on_note=None, on_sticker=None) -> dict | None:
     # Do not decode content until sender, recipient and private-chat scope pass.
     if not isinstance(message, dict) or not _ID.fullmatch(account_id): return None
     sender = message.get('sender_id')
@@ -40,10 +40,22 @@ def prepare_text(message: dict[str, Any], account_id: str, conversation_user: st
         ref = shared_reference(content)
         if ref is None or on_note is None: return None
         text = f'用户转发了一篇小红书笔记（ID：{ref[0]}）。请使用小红书笔记查看工具阅读文字和图片。'
+    elif payload.get('content_type') == 16:
+        if on_sticker is None: return None
+        sticker = payload.get('content')
+        if isinstance(sticker, str):
+            if len(sticker) > 100_000: return None
+            try: sticker = json.loads(sticker)
+            except (ValueError, TypeError): return None
+        url = image_url({'url_default': sticker.get('url')}) if isinstance(sticker, dict) else None
+        if not url: return None
+        text = '用户发送了一个小红书表情包。'
     else: return None
     if not decisions.claim(account_id, message_id, sender, conversation_user, False, policy): return None
     if payload.get('content_type') == 3:
         on_note(sender, *ref)
+    elif payload.get('content_type') == 16:
+        on_sticker(sender, url)
     return {
         'message_id': message_id,
         'platform': 'xiaohongshu',

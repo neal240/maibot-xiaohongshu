@@ -370,12 +370,14 @@ class XiaohongshuPlugin(MaiBotPlugin):
                 value = item.get('created_at', 0) if isinstance(item, dict) else 0
                 return value if isinstance(value, int) and not isinstance(value, bool) else 0
             for item in sorted(messages, key=created):
-                reference = []
+                reference, stickers = [], []
                 envelope = prepare_text(item, self._account, user, self._policy,
                                         self._decisions, not_before_ms=baselines[user],
-                                        on_note=lambda sender, note_id, token: reference.append((note_id, token)))
+                                        on_note=lambda sender, note_id, token: reference.append((note_id, token)),
+                                        on_sticker=lambda sender, url: stickers.append(url))
                 if envelope is None: continue
                 if reference: await self._enrich_note(envelope, *reference[0])
+                if stickers: await self._enrich_sticker(envelope, stickers[0])
                 await self._add_identity_context(user)
                 self._decisions.mark_inflight(self._account, envelope['message_id'])
                 accepted = await self.ctx.gateway.route_message(
@@ -428,6 +430,15 @@ class XiaohongshuPlugin(MaiBotPlugin):
             self._identity_context[user] = (qq, 1)
         except Exception as exc:
             self.ctx.logger.warning('小红书身份上下文未能更新：%s', type(exc).__name__)
+
+    async def _enrich_sticker(self, envelope: dict, url: str) -> None:
+        try:
+            image, _mime = await asyncio.to_thread(download_image, url)
+            envelope['raw_message'].append({'type': 'image', 'data': '',
+                                            'binary_data_base64': base64.b64encode(image).decode('ascii')})
+        except Exception:
+            envelope['raw_message'][0]['data'] += '（图片暂时无法读取）'
+            self.ctx.logger.warning('小红书表情包图片暂时无法读取')
 
     async def _enrich_note(self, envelope: dict, note_id: str, token: str) -> None:
         async with self._lock:

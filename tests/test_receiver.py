@@ -52,3 +52,30 @@ class ReceiverTests(unittest.TestCase):
             self.assertEqual(seen, [(B, C, 'secret')])
             self.assertFalse(db.reply_allowed(A, B))
             db.close()
+
+    def test_sticker_is_checked_and_dispatched_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            db = Decisions(Path(d) / 'a.sqlite')
+            sticker = lambda url: json.dumps({'content_type': 16, 'content': json.dumps({
+                'smileId': 'synthetic', 'url': url, 'isGif': 1, 'width': 100, 'height': 100})})
+            msg = {'sender_id': B, 'receiver_id': A, 'group_chat': False, 'id': 'sticker',
+                   'created_at': 1234, 'content': sticker('https://ci.xhscdn.com/test.gif')}
+            seen = []
+            result = prepare_text(msg, A, B, Policy(frozenset({B}), 1), db, not_before_ms=0,
+                                  on_sticker=lambda *args: seen.append(args))
+            self.assertIn('表情包', result['raw_message'][0]['data'])
+            self.assertEqual(seen, [(B, 'https://ci.xhscdn.com/test.gif')])
+            db.acknowledge(A, 'sticker')
+            self.assertIsNone(prepare_text(msg, A, B, Policy(frozenset({B}), 1), db, not_before_ms=0,
+                                           on_sticker=lambda *args: seen.append(args)))
+            msg['id'] = 'bad'; msg['content'] = sticker('https://ci.xhscdn.com.evil.example/a')
+            self.assertIsNone(prepare_text(msg, A, B, Policy(frozenset({B}), 1), db, not_before_ms=0,
+                                           on_sticker=lambda *args: seen.append(args)))
+            msg['id'] = 'private'; msg['content'] = sticker('https://127.0.0.1/a')
+            self.assertIsNone(prepare_text(msg, A, B, Policy(frozenset({B}), 1), db, not_before_ms=0,
+                                           on_sticker=lambda *args: seen.append(args)))
+            msg['id'] = 'group'; msg['group_chat'] = True
+            self.assertIsNone(prepare_text(msg, A, B, Policy(frozenset({B}), 1), db, not_before_ms=0,
+                                           on_sticker=lambda *args: seen.append(args)))
+            self.assertEqual(len(seen), 1)
+            db.close()

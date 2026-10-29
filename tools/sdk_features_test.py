@@ -115,6 +115,13 @@ async def main():
                 msg = {'raw_message': [{'type': 'text', 'data': ''}]}
                 await instance._enrich_note(msg, NOTE, 'example')
                 assert msg['raw_message'][1]['binary_data_base64'] == 'aW1hZ2UtYnl0ZXM='
+                sticker = {'raw_message': [{'type': 'text', 'data': '表情包'}]}
+                await instance._enrich_sticker(sticker, 'https://ci.xhscdn.com/synthetic.gif')
+                assert sticker['raw_message'][1]['binary_data_base64'] == 'aW1hZ2UtYnl0ZXM='
+            with patch.object(plugin, 'download_image', side_effect=ValueError):
+                sticker = {'raw_message': [{'type': 'text', 'data': '表情包'}]}
+                await instance._enrich_sticker(sticker, 'https://ci.xhscdn.com/synthetic.gif')
+                assert '暂时无法读取' in sticker['raw_message'][0]['data']
             await instance._plan_publish()
             assert FakeCreator.calls == [('标题', '正文', True, 1)]
             assert instance._publication.status(ME)['state'] == 'published'
